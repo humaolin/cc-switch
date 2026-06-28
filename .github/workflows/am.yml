@@ -1,78 +1,60 @@
-linux-arm64-debian10:
-  name: Linux ARM64 Debian10 Compatible
-  runs-on: ubuntu-22.04-arm
+jobs:
+  linux-debian10-arm64:
+    runs-on: ubuntu-22.04-arm
 
-  container:
-    image: arm64v8/debian:buster
+    container:
+      image: arm64v8/debian:buster
 
-  steps:
-    - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Install build tools
-      run: |
-        apt-get update
+      - name: Install Dependencies
+        run: |
+          apt-get update
 
-        apt-get install -y \
-          build-essential \
-          curl \
-          wget \
-          git \
-          pkg-config \
-          file \
-          python3 \
-          ca-certificates
+          apt-get install -y \
+            curl \
+            wget \
+            git \
+            build-essential \
+            pkg-config \
+            python3 \
+            ca-certificates \
+            libssl-dev \
+            libgtk-3-dev \
+            libsoup2.4-dev
 
-    - name: Install GTK
-      run: |
-        apt-get install -y \
-          libgtk-3-dev \
-          libsoup2.4-dev \
-          libssl-dev
+      - name: Install NodeJS
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
 
-    - name: Install NodeJS 20
-      run: |
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-        apt-get install -y nodejs
+      - name: Install pnpm
+        run: npm install -g pnpm
 
-    - name: Install pnpm
-      run: |
-        npm install -g pnpm
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          echo "/root/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install Rust
-      run: |
-        curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
 
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Build
+        run: |
+          source /root/.cargo/env
+          pnpm tauri build --bundles deb,appimage
 
-    - name: Rust Version
-      run: |
-        rustc -V
-        cargo -V
+      - name: Check GLIBC
+        run: |
+          BIN=$(find src-tauri/target -type f -executable | head -1)
 
-    - name: Install Frontend Dependencies
-      run: |
-        pnpm install --frozen-lockfile
+          echo "===== GLIBC ====="
+          strings "$BIN" | grep GLIBC_ | sort -u
 
-    - name: Build
-      env:
-        CI: true
-      run: |
-        source $HOME/.cargo/env
-
-        pnpm tauri build \
-          --target aarch64-unknown-linux-gnu \
-          --bundles deb
-
-    - name: Verify GLIBC
-      run: |
-        BIN=$(find src-tauri/target -type f -executable | head -1)
-
-        echo "===== REQUIRED GLIBC ====="
-        strings "$BIN" | grep GLIBC_ | sort -u
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-arm64-debian10
-        path: |
-          src-tauri/target/**/bundle/**/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian10-arm64
+          path: |
+            src-tauri/target/**/bundle/**/*.deb
+            src-tauri/target/**/bundle/**/*.AppImage
