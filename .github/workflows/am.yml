@@ -1,14 +1,25 @@
+name: Debian10 ARM64 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
 jobs:
   linux-debian10-arm64:
+    name: Debian10 ARM64
     runs-on: ubuntu-22.04-arm
 
     container:
       image: arm64v8/debian:buster
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
         run: |
           apt-get update
 
@@ -24,35 +35,43 @@ jobs:
             libgtk-3-dev \
             libsoup2.4-dev
 
-      - name: Install NodeJS
+      - name: Install NodeJS 20
         run: |
           curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
           apt-get install -y nodejs
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: |
+          npm install -g pnpm
 
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+      - name: Add Cargo To Path
+        run: |
           echo "/root/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install frontend deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
+      - name: Check Versions
         run: |
-          source /root/.cargo/env
-          pnpm tauri build --bundles deb,appimage
+          /root/.cargo/bin/rustc --version
+          /root/.cargo/bin/cargo --version
+          node --version
+          pnpm --version
 
-      - name: Check GLIBC
+      - name: Install Frontend Dependencies
         run: |
-          BIN=$(find src-tauri/target -type f -executable | head -1)
+          pnpm install --frozen-lockfile
 
-          echo "===== GLIBC ====="
-          strings "$BIN" | grep GLIBC_ | sort -u
+      - name: Build Tauri
+        run: |
+          export PATH="/root/.cargo/bin:$PATH"
 
-      - uses: actions/upload-artifact@v4
+          pnpm tauri build \
+            --bundles deb,appimage
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: debian10-arm64
           path: |
